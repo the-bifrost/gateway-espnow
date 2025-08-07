@@ -140,10 +140,6 @@ void OnDataSent(uint8_t *mac_addr, uint8_t sendStatus) {
  *
  * Não faz a validação das mensagens (esse é o papel do dispatcher), apenas 
  * confere se possúi versão e destinatário.
- *
- * @param
- * @param
- * @param
  */
 bool processaMensagemUART() {
   if (bifrostSerial.available() > 0) {
