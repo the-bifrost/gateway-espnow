@@ -14,7 +14,7 @@ Sem tutoriais até o momento .-.
 
 - 🧾 Retorna logs de Deug via Serial USB
 
-- 🔁 Comunicação bi-direcional: _Sensores <--> Bifrost_
+- 🔁 Comunicação bi-direcional: _Sensores <~~~> Bifrost_
 
 ## Para fazer
 
