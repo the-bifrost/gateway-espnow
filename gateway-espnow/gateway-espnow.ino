@@ -23,13 +23,6 @@ SoftwareSerial bifrostSerial(RX_PIN, TX_PIN);
 const int SERIAL_BAUDRATE = 115200;
 const int BIFROST_BAUDRATE = 9600;
 
-/// Estrutura de dados da Bifrost
-/// Usamos um struct para encapsular os blocos de dados, isso facilita
-/// o envio dos dados espnow com esp_now_send().
-typedef struct struct_message {
-  char data[240];
-} struct_message;
-
 void initSerial() {
   Serial.begin(SERIAL_BAUDRATE);
   bifrostSerial.begin(BIFROST_BAUDRATE);
@@ -105,16 +98,16 @@ void OnDataRecv(uint8_t *mac, uint8_t *incomingData, uint8_t len) {
   // Envia o texto pela software serial.
   bifrostSerial.println(payload);
 
-#ifdef DEBUG
-  Serial.println(F("\n--- Pacote recebido ---"));
-  Serial.print(F("MAC origem: "));
-  Serial.println(convertMacIntoString(mac));
-  Serial.print(F("Tamanho: "));
-  Serial.println(len);
-  Serial.print(F("Conteúdo: "));
-  Serial.println(payload);
-  Serial.println(F("------------------------------------"));
-#endif
+  #ifdef DEBUG
+    Serial.println(F("\n--- Pacote recebido ---"));
+    Serial.print(F("MAC origem: "));
+    Serial.println(convertMacIntoString(mac));
+    Serial.print(F("Tamanho: "));
+    Serial.println(len);
+    Serial.print(F("Conteúdo: "));
+    Serial.println(payload);
+    Serial.println(F("------------------------------------"));
+  #endif
 }
 
 /**
@@ -151,12 +144,12 @@ bool processaMensagemUART() {
     /// Evita erros e processamento desnecessário.
     if (rawJson.length() == 0) return false;
 
-#ifdef DEBUG
-    Serial.println(F("\n--- Mensagem Recebida via Dispatcher ---"));
-    Serial.print(F("\nRaw JSON:"));
-    Serial.println(rawJson);
-    Serial.println(F("------------------------------------"));
-#endif
+    #ifdef DEBUG
+      Serial.println(F("\n--- Mensagem Recebida via Dispatcher ---"));
+      Serial.print(F("\nRaw JSON:"));
+      Serial.println(rawJson);
+      Serial.println(F("------------------------------------"));
+    #endif
 
     /// Desserializamos o JSON para saber o destinatário da mensagem.
     /// Atualmente essa é a única utilidade do JSON, já que não é necessário validar. 
@@ -166,18 +159,19 @@ bool processaMensagemUART() {
     
     /// Em caso de erro ao converter, simplesmente retorna.
     if (error) {
-#ifdef DEBUG
-      Serial.print(F("Erro ao parsear JSON: "));
-      Serial.println(error.c_str());
-#endif
+      #ifdef DEBUG
+        Serial.print(F("Erro ao parsear JSON: "));
+        Serial.println(error.c_str());
+      #endif
+      
       return false;
     }
     
     /// Caso não possuir uma versão válida de envelope, retorna
     if (!doc.containsKey("v")) {
-#ifdef DEBUG
-      Serial.println(F("Mensagem recebida não contém requisitos minimos."));
-#endif
+      #ifdef DEBUG
+        Serial.println(F("Mensagem recebida não contém requisitos minimos."));
+      #endif
       return false;
     }
 
@@ -192,24 +186,22 @@ bool processaMensagemUART() {
 
     // Converte a string MAC para bytes
     if (sscanf(macStr, "%hhx:%hhx:%hhx:%hhx:%hhx:%hhx", &mac[0], &mac[1], &mac[2], &mac[3], &mac[4], &mac[5]) != 6) {
-#ifdef DEBUG
-      Serial.println(F("Erro: Formato de MAC inválido. Use AA:BB:CC:DD:EE:FF"));
-#endif
+      #ifdef DEBUG
+        Serial.println(F("Erro: Formato de MAC inválido. Use AA:BB:CC:DD:EE:FF"));
+      #endif
       return false; 
     }
 
-    struct_message message;
-    strlcpy(message.data, rawJson.c_str(), sizeof(message.data));
-
     esp_now_del_peer(mac);
+
     if (esp_now_add_peer(mac, ESP_NOW_ROLE_COMBO, 1, NULL, 0) != 0) {
-#ifdef DEBUG
-      Serial.println(F("Erro ao adicionar peer ESP-NOW"));
-#endif
+      #ifdef DEBUG
+        Serial.println(F("Erro ao adicionar peer ESP-NOW"));
+      #endif
       return false;
     }
 
-    int result = esp_now_send(mac, (uint8_t *)&message, sizeof(message));
+    int result = esp_now_send(mac, (uint8_t *)rawJson.c_str(), rawJson.length());
 
     if (result == 0) return true;
     
