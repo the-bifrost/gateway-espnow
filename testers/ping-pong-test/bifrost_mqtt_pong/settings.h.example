@@ -13,9 +13,9 @@
 #pragma once
 
 // --- Configurações de Wi-Fi ---
-const char* WIFI_SSID     = "bifa";
-const char* WIFI_PASSWORD = "arduinagem";
+const char* WIFI_SSID     = "ssid";
+const char* WIFI_PASSWORD = "password";
 
 // --- Configurações do Broker MQTT ---
-const char* MQTT_BROKER = "10.42.0.1";
+const char* MQTT_BROKER = "ip";
 const int MQTT_PORT     = 1883;
