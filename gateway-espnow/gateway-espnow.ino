@@ -1,21 +1,26 @@
-/**
- * @file  gateway-espnow.ino
- * @brief Implementa uma Unidade EspNow da Bifrost.
- *
- * Usa o envelopamento padrão de mensagens para fazer a leitura, validação e roteamento
- * dos dados do protocolo espnow. 
- */
+/*
+  ___ _  __            _   
+ | _ |_)/ _|_ _ ___ __| |_ 
+ | _ \ |  _| '_/ _ (_-<  _|
+ |___/_|_| |_| \___/__/\__|
+
+ Bifrost - Gateway EspNow  
+
+ Esse código implementa uma Unidade EspNow da Bifrost. Usa o envelopamento padrão de mensagens 
+ para fazer a leitura, validação e roteamento dos dados do protocolo espnow. 
+
+*/
+
 #include <Arduino.h>
-#include <SoftwareSerial.h>
-#include <ArduinoJson.h>
 #include <ESP8266WiFi.h>
 #include <espnow.h>
 
-// Descomentar essa linha para modo verbose
-#define DEBUG
+#include <SoftwareSerial.h>
+#include <ArduinoJson.h>
+#include <ArduinoLog.h>
 
-/// Separamos as conexões seriais para que não gere um looping
-/// Usar a mesma faz com que o Dispatcher leia tudo o que a Unidade printa.
+// Separamos as conexões seriais para que não gere um looping
+// Usar a mesma faz com que o Dispatcher leia tudo o que a Unidade printa.
 const uint8_t RX_PIN = D5;
 const uint8_t TX_PIN = D6;
 SoftwareSerial bifrostSerial(RX_PIN, TX_PIN);
@@ -24,9 +29,16 @@ const int SERIAL_BAUDRATE = 115200;
 const int BIFROST_BAUDRATE = 9600;
 
 void initSerial() {
+
+  // Inicia serial
   Serial.begin(SERIAL_BAUDRATE);
+
+  // Inicia SoftwareSerial
   bifrostSerial.begin(BIFROST_BAUDRATE);
-  delay(1000);
+
+  // Os níveis disponíveis são:
+  // LOG_LEVEL_SILENT, LOG_LEVEL_FATAL, LOG_LEVEL_ERROR, LOG_LEVEL_WARNING, LOG_LEVEL_INFO, LOG_LEVEL_TRACE, LOG_LEVEL_VERBOSE
+  Log.begin(LOG_LEVEL_VERBOSE, &Serial);
 }
 
 void initWiFi() {
@@ -42,7 +54,7 @@ void initWiFi() {
 
 void initEspNow() {
   if (esp_now_init() != 0) {
-    Serial.println(F("Erro ao inicializar ESP-NOW!"));
+    Log.fatalln(F("Erro ao inicializar ESP-NOW!"));
     delay(2000);
     ESP.restart();
   }
@@ -62,9 +74,8 @@ void setup() {
   initEspNow();
 
   const String MAC = WiFi.macAddress();
-  Serial.println();
-  Serial.println(F("Unidade EspNow Iniciada!."));
-  Serial.println("MAC: " + MAC);
+  Log.noticeln(F(CR "Unidade EspNow Iniciada!."));
+  Log.noticeln(F("MAC: %s") , MAC.c_str());
 }
 
 /**
@@ -88,6 +99,7 @@ void loop() {
  * @param  len           Tamanho da mensagem recebida
  */
 void OnDataRecv(uint8_t *mac, uint8_t *incomingData, uint8_t len) {
+
   // Cria um buffer local e copia os dados para ele
   char payload[len + 1];
   memcpy(payload, incomingData, len);
@@ -98,16 +110,11 @@ void OnDataRecv(uint8_t *mac, uint8_t *incomingData, uint8_t len) {
   // Envia o texto pela software serial.
   bifrostSerial.println(payload);
 
-  #ifdef DEBUG
-    Serial.println(F("\n--- Pacote recebido ---"));
-    Serial.print(F("MAC origem: "));
-    Serial.println(convertMacIntoString(mac));
-    Serial.print(F("Tamanho: "));
-    Serial.println(len);
-    Serial.print(F("Conteúdo: "));
-    Serial.println(payload);
-    Serial.println(F("------------------------------------"));
-  #endif
+  Log.verboseln(F("\n--- Pacote recebido ---"));
+  Log.verboseln(F("MAC origem: %s"), convertMacIntoString(mac));
+  Log.verboseln(F("Tamanho: %i"), len);
+  Log.verboseln(F("Conteúdo: %s"), payload);
+  Log.verboseln(F("------------------------------------"));
 }
 
 /**
@@ -120,11 +127,9 @@ void OnDataSent(uint8_t *mac_addr, uint8_t sendStatus) {
   Serial.print(F("Status do envio: "));
   
   if (sendStatus == 0) {
-    Serial.println(F("Sucesso"));
+    Log.verboseln(F("Sucesso"));
   } else {
-    Serial.print(F("Falha (código "));
-    Serial.print(sendStatus);
-    Serial.println(F(")"));
+    Log.verboseln(F("Falha (código %i)"), sendStatus);
   }
 }
 
@@ -144,12 +149,9 @@ bool processaMensagemUART() {
     /// Evita erros e processamento desnecessário.
     if (rawJson.length() == 0) return false;
 
-    #ifdef DEBUG
-      Serial.println(F("\n--- Mensagem Recebida via Dispatcher ---"));
-      Serial.print(F("\nRaw JSON:"));
-      Serial.println(rawJson);
-      Serial.println(F("------------------------------------"));
-    #endif
+    Log.verboseln(F("\n--- Mensagem Recebida via Dispatcher ---"));
+    Log.verboseln(F("\nRaw JSON: %s"), rawJson);
+    Log.verboseln(F("------------------------------------"));
 
     /// Desserializamos o JSON para saber o destinatário da mensagem.
     /// Atualmente essa é a única utilidade do JSON, já que não é necessário validar. 
@@ -159,19 +161,13 @@ bool processaMensagemUART() {
     
     /// Em caso de erro ao converter, simplesmente retorna.
     if (error) {
-      #ifdef DEBUG
-        Serial.print(F("Erro ao parsear JSON: "));
-        Serial.println(error.c_str());
-      #endif
-      
+      Log.verboseln(F("Erro ao parsear JSON: %s"), error.c_str());
       return false;
     }
     
     /// Caso não possuir uma versão válida de envelope, retorna
     if (!doc.containsKey("v")) {
-      #ifdef DEBUG
-        Serial.println(F("Mensagem recebida não contém requisitos minimos."));
-      #endif
+      Log.verboseln(F("Mensagem recebida não contém requisitos minimos."));
       return false;
     }
 
@@ -186,18 +182,14 @@ bool processaMensagemUART() {
 
     // Converte a string MAC para bytes
     if (sscanf(macStr, "%hhx:%hhx:%hhx:%hhx:%hhx:%hhx", &mac[0], &mac[1], &mac[2], &mac[3], &mac[4], &mac[5]) != 6) {
-      #ifdef DEBUG
-        Serial.println(F("Erro: Formato de MAC inválido. Use AA:BB:CC:DD:EE:FF"));
-      #endif
+      Log.warning(F("Erro: Formato de MAC inválido. Use AA:BB:CC:DD:EE:FF"));
       return false; 
     }
 
     esp_now_del_peer(mac);
 
     if (esp_now_add_peer(mac, ESP_NOW_ROLE_COMBO, 1, NULL, 0) != 0) {
-      #ifdef DEBUG
-        Serial.println(F("Erro ao adicionar peer ESP-NOW"));
-      #endif
+      Log.warning(F("Erro ao adicionar peer ESP-NOW"));
       return false;
     }
 
