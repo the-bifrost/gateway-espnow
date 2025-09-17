@@ -1,0 +1,21 @@
+/*
+  ___ _  __            _   
+ | _ |_)/ _|_ _ ___ __| |_ 
+ | _ \ |  _| '_/ _ (_-<  _|
+ |___/_|_| |_| \___/__/\__|
+
+ Bifrost - Mqtt Pong Settings 
+
+ Configurações para o funcionamento correto do teste ping-pong mqtt
+
+*/
+
+#pragma once
+
+// --- Configurações de Wi-Fi ---
+const char* WIFI_SSID     = "bifa";
+const char* WIFI_PASSWORD = "arduinagem";
+
+// --- Configurações do Broker MQTT ---
+const char* MQTT_BROKER = "10.42.0.1";
+const int MQTT_PORT     = 1883;

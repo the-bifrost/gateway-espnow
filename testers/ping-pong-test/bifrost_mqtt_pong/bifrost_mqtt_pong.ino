@@ -1,85 +1,83 @@
-/**
- * @file espnow_mqtt_pong.ino
- * @brief Ouve pings via MQTT e responde com pongs.
- *
- * @author Thales Martins
- * @version 1.0
- * @date 17/09/2025
- */
+/*
+  ___ _  __            _   
+ | _ |_)/ _|_ _ ___ __| |_ 
+ | _ \ |  _| '_/ _ (_-<  _|
+ |___/_|_| |_| \___/__/\__|
+
+ Bifrost - Mqtt Pong  
+
+ Esse código ouve pings via MQTT no padrão Envelope Bifrost e então responde com pongs.
+
+*/
+
 #include <Arduino.h>
 #include <ESP8266WiFi.h>
-#include <PubSubClient.h>
+
 #include <ArduinoJson.h>
+#include <ArduinoLog.h>
+#include <PubSubClient.h>
 
-// --- Configurações de Wi-Fi ---
-const char* WIFI_SSID = "bifa";
-const char* WIFI_PASSWORD = "arduinagem";
+#include "settings.h"
 
-// --- Configurações do Broker MQTT ---
-const char* MQTT_BROKER = "10.42.0.1";
-const int MQTT_PORT = 1883;
+// Tópicos MQTT
+const char* MQTT_SUB_TOPIC = "sensores/pong/command";  // Tópico para receber os pings
+const char* MQTT_PUB_TOPIC = "sensores/pong/data";     // Tópico para enviar os pongs
 
-// --- Tópicos MQTT ---
-const char* MQTT_SUB_TOPIC = "sensores/pong/command"; // Tópico para receber os pings
-const char* MQTT_PUB_TOPIC = "sensores/pong/data";    // Tópico para enviar os pongs
+// ID do dispositivo
+const String DEVICE_TYPE = "pong";
+const String DEVICE_ID   = "esp8266-mqtt-pong";
 
-// --- Identidade do Dispositivo ---
-const String device_type = "pong";
-const String device_id = "esp8266-mqtt-pong";
-const String destination_id = "esp8266-mqtt-ping"; // ID do dispositivo que originou o ping
-
-// --- Clientes ---
+// Clientes
 WiFiClient espClient;
 PubSubClient client(espClient);
 
-// Protótipos de funções
-void setup_wifi();
-void reconnect();
-void mqttCallback(char* topic, byte* payload, unsigned int length);
 
 void setup() {
   Serial.begin(115200);
-  delay(2000);
-  Serial.println("Inicializando o dispositivo Pong...");
+  while(!Serial && !Serial.available()){}
 
+  // Os níveis disponíveis são:
+  // LOG_LEVEL_SILENT, LOG_LEVEL_FATAL, LOG_LEVEL_ERROR, LOG_LEVEL_WARNING, LOG_LEVEL_INFO, LOG_LEVEL_TRACE, LOG_LEVEL_VERBOSE
+  Log.begin(LOG_LEVEL_WARNING, &Serial);
+  Log.notice(F("Inicializando o dispositivo Pong..."));
+
+  // Configura o Wifi, servidor e a função de callback do MQTT
   setup_wifi();
-
-  // Configura o servidor e a função de callback do MQTT
   client.setServer(MQTT_BROKER, MQTT_PORT);
   client.setCallback(mqttCallback);
 }
 
 void loop() {
-  // Se não estiver conectado, tenta reconectar
+  // O dispositivo só responde quando recebe algo no callback, portanto só usamos o loop para
+  // tratar as desconexões e para o loop da conexão com a rede. 
   if (!client.connected()) {
     reconnect();
   }
-  // Mantém o cliente MQTT processando mensagens e a conexão viva
+  
   client.loop();
 }
 
 void setup_wifi() {
   delay(10);
-  Serial.println();
-  Serial.print("Conectando-se a ");
-  Serial.println(WIFI_SSID);
+
+  Log.notice(F(CR "Conectando-se a %s" CR), WIFI_SSID);
 
   WiFi.mode(WIFI_STA);
   WiFi.begin(WIFI_SSID, WIFI_PASSWORD);
 
+  // Aguarda até o wifi conectar
   while (WiFi.status() != WL_CONNECTED) {
     delay(500);
-    Serial.print(".");
+    Log.notice(".");
   }
 
-  Serial.println("\nWi-Fi conectado!");
-  Serial.print("Endereço IP: ");
-  Serial.println(WiFi.localIP());
+  Log.notice(F( CR "Wi-Fi conectado!" CR));
+  Log.notice(F("Endereço IP: %p" CR), WiFi.localIP());
 }
 
+
 void mqttCallback(char* topic, byte* payload, unsigned int length) {
-  Serial.print("Mensagem recebida no tópico: ");
-  Serial.println(topic);
+  Log.verboseln("Mensagem recebida no tópico: %C", topic);
 
   // Converte o payload para um formato que o ArduinoJson entenda
   char buffer[length + 1];
@@ -91,8 +89,7 @@ void mqttCallback(char* topic, byte* payload, unsigned int length) {
   DeserializationError error = deserializeJson(doc, buffer);
 
   if (error) {
-    Serial.print("Erro ao parsear JSON: ");
-    Serial.println(error.c_str());
+    Log.verboseln("Erro ao parsear JSON: %s", error.c_str());
     return;
   }
 
@@ -102,19 +99,19 @@ void mqttCallback(char* topic, byte* payload, unsigned int length) {
 
   // Verifica se é uma mensagem de ping
   if (strcmp(type, "echo") == 0 && strcmp(state, "ping") == 0) {
-    Serial.println("Ping recebido! Enviando pong de volta...");
+    Log.verboseln("Ping recebido! Enviando pong de volta...");
 
     // Cria o documento JSON de resposta
     DynamicJsonDocument responseDoc(240);
     responseDoc["v"] = 1;
-    responseDoc["src"] = device_id;
-    responseDoc["dst"] = destination_id;
+    responseDoc["src"] = DEVICE_ID;
+    responseDoc["dst"] = doc["src"];
     responseDoc["type"] = "echo_response";
-    responseDoc["protocol"] = "mqtt"; // Protocolo agora é MQTT
-    responseDoc["ts"] = doc["ts"];    // Mantém o timestamp original
+    responseDoc["protocol"] = "mqtt"; 
+    responseDoc["ts"] = doc["ts"];
 
     JsonObject payloadOut = responseDoc.createNestedObject("payload");
-    payloadOut["state"] = "pong";
+    payloadOut["state"] = DEVICE_TYPE;
     payloadOut["seq"] = doc["payload"]["seq"]; // Devolve o mesmo número de sequência
 
     // Serializa o JSON para uma string
@@ -123,26 +120,27 @@ void mqttCallback(char* topic, byte* payload, unsigned int length) {
 
     // Publica a resposta no tópico de dados
     client.publish(MQTT_PUB_TOPIC, jsonBuffer);
-    Serial.print("Pong enviado para o tópico: ");
-    Serial.println(MQTT_PUB_TOPIC);
+    Log.verboseln("Pong enviado para o tópico: ", MQTT_PUB_TOPIC);
   }
 }
 
+
 void reconnect() {
-  // Loop até reconectar
+  // Loopa o código até o esp se reconectar
   while (!client.connected()) {
-    Serial.print("Tentando conectar ao Broker MQTT...");
-    // Tenta conectar usando o device_id como client ID
-    if (client.connect(device_id.c_str())) {
-      Serial.println("Conectado!");
+    Log.warningln("Tentando conectar ao Broker MQTT...");
+
+    // Usamos o device_id para tentar cadastrar no broker
+    if (client.connect(DEVICE_ID.c_str())) {
+      Log.warningln("Conectado!");
+
       // Assina o tópico para receber os comandos (pings)
       client.subscribe(MQTT_SUB_TOPIC);
-      Serial.print("Inscrito no tópico: ");
-      Serial.println(MQTT_SUB_TOPIC);
+      Log.warningln("Inscrito no tópico: %s", MQTT_SUB_TOPIC);
     } else {
-      Serial.print("Falha, rc=");
-      Serial.print(client.state());
-      Serial.println(" Tentando novamente em 5 segundos");
+      Log.fatalln("Falha, rc=%i", client.state());
+      Log.fatalln(" Tentando novamente em 5 segundos");
+
       // Espera 5 segundos antes de tentar novamente
       delay(5000);
     }
